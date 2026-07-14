@@ -1,5 +1,8 @@
 APP := CodexTouchBar.app
 BINARY := .build/CodexTouchBar
+SOURCE := Sources/CodexTouchBar/main.swift
+RESOURCES := Sources/CodexTouchBar/Resources
+INFO_PLIST := Config/Info.plist
 LABEL := com.piyadanai.codex-touch-bar
 INSTALLED_APP := $(HOME)/Applications/$(APP)
 INSTALLED_BINARY := $(INSTALLED_APP)/Contents/MacOS/CodexTouchBar
@@ -10,14 +13,14 @@ DOMAIN := gui/$(shell id -u)
 
 build:
 	mkdir -p .build
-	xcrun swiftc -O -framework AppKit -framework CoreLocation Sources/CodexTouchBar/main.swift -o $(BINARY)
+	xcrun swiftc -O -framework AppKit -framework CoreLocation $(SOURCE) -o $(BINARY)
 
 app: build
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp $(BINARY) $(APP)/Contents/MacOS/CodexTouchBar
-	cp Assets/farm-*.png $(APP)/Contents/Resources/
-	cp Info.plist $(APP)/Contents/Info.plist
+	cp $(RESOURCES)/farm-*.png $(APP)/Contents/Resources/
+	cp $(INFO_PLIST) $(APP)/Contents/Info.plist
 	codesign --force --sign - $(APP)
 
 test: build

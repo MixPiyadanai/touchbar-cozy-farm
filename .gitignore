@@ -1,3 +1,4 @@
 .build/
+.swiftpm/
 CodexTouchBar.app/
 .DS_Store

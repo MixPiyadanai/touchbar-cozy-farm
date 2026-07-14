@@ -3,6 +3,25 @@ import CoreLocation
 import Darwin
 import Foundation
 
+private var resourceBundle: Bundle {
+#if SWIFT_PACKAGE
+    return Bundle.module
+#else
+    return Bundle.main
+#endif
+}
+
+private let usageDetailRect = NSRect(x: 41, y: 1, width: 67, height: 12)
+
+private func compactUsageDetail(_ detail: String, maxWidth: CGFloat, font: NSFont) -> String {
+    let attributes: [NSAttributedString.Key: Any] = [.font: font]
+    guard
+        (detail as NSString).size(withAttributes: attributes).width > maxWidth,
+        let separator = detail.range(of: " · ")
+    else { return detail }
+    return String(detail[..<separator.lowerBound])
+}
+
 func codexGlyphAlpha(brightness: CGFloat, chroma: CGFloat) -> CGFloat {
     let blue = (chroma - 0.05) / 0.15
     let white = (brightness - 0.72) / 0.18
@@ -494,7 +513,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
     private lazy var farmArtwork = farmImage(currentFarmPeriod)
     private lazy var farmSprites: NSImage? = {
         guard
-            let url = Bundle.main.url(forResource: "farm-sprites", withExtension: "png")
+            let url = resourceBundle.url(forResource: "farm-sprites", withExtension: "png")
         else { return nil }
         return NSImage(contentsOf: url)
     }()
@@ -1280,7 +1299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
     private func farmImage(_ period: FarmPeriod) -> NSImage {
         let size = NSSize(width: farmTileWidth, height: 30)
         guard
-            let url = Bundle.main.url(
+            let url = resourceBundle.url(
                 forResource: "farm-\(period.rawValue)",
                 withExtension: "png"
             ),
@@ -1610,9 +1629,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
             liveColor.setFill()
             NSBezierPath(ovalIn: NSRect(x: 34, y: 7, width: 4, height: 4)).fill()
             NSGraphicsContext.restoreGraphicsState()
-            (usage?.detailLabel ?? "Loading…").draw(at: NSPoint(x: 41, y: 3), withAttributes: [
+            let detailFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+            let detailStyle = NSMutableParagraphStyle()
+            detailStyle.lineBreakMode = .byTruncatingTail
+            let detail = compactUsageDetail(
+                usage?.detailLabel ?? "Loading…",
+                maxWidth: usageDetailRect.width,
+                font: detailFont
+            )
+            (detail as NSString).draw(with: usageDetailRect, options: [
+                .usesLineFragmentOrigin,
+                .truncatesLastVisibleLine
+            ], attributes: [
                 .foregroundColor: NSColor(white: 0.72, alpha: 1),
-                .font: NSFont.systemFont(ofSize: 9, weight: .semibold)
+                .font: detailFont,
+                .paragraphStyle: detailStyle
             ])
 
             for index in 0..<2 {
@@ -1712,6 +1743,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
 }
 
 func runSelfTest() {
+#if SWIFT_PACKAGE
+    precondition(resourceBundle.url(forResource: "farm-day", withExtension: "png") != nil)
+#endif
     precondition(
         Usage(windows: [], model: "gpt-5.6-sol", planType: "team").detailLabel == "5.6-Sol · Team"
     )
@@ -1755,6 +1789,22 @@ func runSelfTest() {
     precondition(!farmLifeIsVisible(period: .day, weather: .rain))
     precondition(interpolatedPercentage(from: 80, to: 60, progress: 0.5) == 70)
     precondition(interpolatedPercentage(from: 80, to: 60, progress: 2) == 60)
+    let detailFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+    precondition(usageDetailRect.maxX < 110)
+    precondition(
+        compactUsageDetail(
+            "5.6-Sol · Team",
+            maxWidth: usageDetailRect.width,
+            font: detailFont
+        ) == "5.6-Sol · Team"
+    )
+    precondition(
+        compactUsageDetail(
+            "5.6-Terra · Teamwork",
+            maxWidth: usageDetailRect.width,
+            font: detailFont
+        ) == "5.6-Terra"
+    )
     precondition(easedProgress(-1) == 0)
     precondition(easedProgress(0.5) == 0.5)
     precondition(easedProgress(2) == 1)
