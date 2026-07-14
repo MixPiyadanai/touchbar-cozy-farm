@@ -82,12 +82,23 @@ make uninstall   # remove the app and LaunchAgent
 
 ```text
 Sources/CodexTouchBar/
-├── main.swift       # native AppKit app and self-test
-└── Resources/       # farm scenes and sprites
+├── main.swift          # CLI dispatch and app startup
+├── App/                # Touch Bar, menu, location, and lifecycle coordination
+├── Features/Usage/     # Codex models, app-server client, and card renderer
+├── Features/Farm/      # farm models, weather client, scene state, and renderer
+├── Platform/           # Control Strip bridge and resource bundle
+├── Diagnostics/        # feature self-tests
+└── Resources/          # farm scenes and sprites
 Config/Info.plist    # macOS bundle configuration
 Package.swift        # standard Swift package manifest
 Makefile             # app bundling and LaunchAgent install
 ```
+
+## Contributing
+
+Run `make check` before submitting a change. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the architecture boundaries, local workflow, testing limits, and farm asset
+requirements.
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 APP := CodexTouchBar.app
 BINARY := .build/CodexTouchBar
-SOURCE := Sources/CodexTouchBar/main.swift
+SOURCES := $(shell find Sources/CodexTouchBar -name '*.swift' -type f)
 RESOURCES := Sources/CodexTouchBar/Resources
 INFO_PLIST := Config/Info.plist
 LABEL := com.piyadanai.codex-touch-bar
@@ -9,11 +9,11 @@ INSTALLED_BINARY := $(INSTALLED_APP)/Contents/MacOS/CodexTouchBar
 LAUNCH_AGENT := $(HOME)/Library/LaunchAgents/$(LABEL).plist
 DOMAIN := gui/$(shell id -u)
 
-.PHONY: build app test status install uninstall clean
+.PHONY: build app test check status install uninstall clean
 
 build:
 	mkdir -p .build
-	xcrun swiftc -O -framework AppKit -framework CoreLocation $(SOURCE) -o $(BINARY)
+	xcrun swiftc -O -framework AppKit -framework CoreLocation $(SOURCES) -o $(BINARY)
 
 app: build
 	rm -rf $(APP)
@@ -25,6 +25,9 @@ app: build
 
 test: build
 	$(BINARY) --self-test
+
+check: test
+	swift run CodexTouchBar --self-test
 
 status: build
 	$(BINARY) --status
