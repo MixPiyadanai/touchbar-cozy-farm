@@ -11,6 +11,10 @@ func wrappedOffset(_ offset: CGFloat, width: CGFloat) -> CGFloat {
     return offset < 0 ? offset + width : offset
 }
 
+func scaledWeatherElementCount(_ baseCount: Int, width: CGFloat) -> Int {
+    max(1, Int((CGFloat(baseCount) * width / 360).rounded()))
+}
+
 func nextAnimalStep(
     phase: CGFloat,
     pauseTicks: Int,
@@ -34,6 +38,17 @@ func farmPeriod(at hour: Int) -> FarmPeriod {
     case 17..<20: return .dusk
     default: return .night
     }
+}
+
+func preferredLocationName(
+    locality: String?,
+    district: String?,
+    region: String?,
+    country: String?
+) -> String? {
+    [locality, district, region, country]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .first { !$0.isEmpty }
 }
 
 enum WeatherCondition: String {
@@ -105,4 +120,14 @@ struct WeatherState {
     let snowfall: Double
     let cloudCover: Double
     let isDay: Bool
+}
+
+func farmWeatherInfo(
+    weather: WeatherState,
+    locationName: String?
+) -> (location: String, weather: String) {
+    (
+        locationName ?? "Local weather",
+        "\(Int(weather.temperature.rounded()))° · \(weather.condition.label)"
+    )
 }

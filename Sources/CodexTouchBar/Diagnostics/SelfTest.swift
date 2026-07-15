@@ -73,6 +73,52 @@ private func runUsageSelfTests() {
 }
 
 private func runFarmSelfTests() {
+    let hiddenFarmFrame = farmFrame(showingUsage: false, usageWidth: 286, farmWidth: 360)
+    precondition(hiddenFarmFrame.origin.x == 0)
+    precondition(hiddenFarmFrame.width == 646)
+    let shownFarmFrame = farmFrame(showingUsage: true, usageWidth: 286, farmWidth: 360)
+    precondition(shownFarmFrame.origin.x == 286)
+    precondition(shownFarmFrame.width == 360)
+    precondition(scaledWeatherElementCount(44, width: 360) == 44)
+    precondition(scaledWeatherElementCount(44, width: 646) == 79)
+    precondition(scaledWeatherElementCount(6, width: 646) == 11)
+
+    precondition(
+        preferredLocationName(
+            locality: "Bangkok",
+            district: "Pathum Wan",
+            region: "Bangkok",
+            country: "Thailand"
+        ) == "Bangkok"
+    )
+    precondition(
+        preferredLocationName(
+            locality: "  ",
+            district: "Pathum Wan",
+            region: "Bangkok",
+            country: "Thailand"
+        ) == "Pathum Wan"
+    )
+    precondition(
+        preferredLocationName(
+            locality: nil,
+            district: nil,
+            region: "Bangkok",
+            country: "Thailand"
+        ) == "Bangkok"
+    )
+    precondition(
+        preferredLocationName(
+            locality: nil,
+            district: nil,
+            region: nil,
+            country: "Thailand"
+        ) == "Thailand"
+    )
+    precondition(
+        preferredLocationName(locality: " ", district: nil, region: "", country: nil) == nil
+    )
+
     precondition(wrappedOffset(-10, width: 360) == 350)
     precondition(wrappedOffset(370, width: 360) == 10)
     let pausedAnimal = nextAnimalStep(
@@ -166,4 +212,24 @@ private func runFarmSelfTests() {
     precondition(weather.temperature == 29.6)
     precondition(weather.cloudCover == 88)
     precondition(weather.isDay)
+
+    let weatherInfo = farmWeatherInfo(weather: weather, locationName: "Bangkok")
+    precondition(weatherInfo.location == "Bangkok")
+    precondition(weatherInfo.weather == "30° · Rain")
+    precondition(farmWeatherInfo(weather: weather, locationName: nil).location == "Local weather")
+    precondition(FarmScene.weatherInfoRect.minX == 4)
+    precondition(FarmScene.weatherInfoRect.maxX <= 112)
+
+#if SWIFT_PACKAGE
+    let scene = FarmScene(width: 360, tileWidth: 288, frameDuration: 1.0 / 30.0)
+    precondition(scene.weatherInfoText == nil)
+    scene.setLocationName("Bangkok")
+    scene.applyWeather(weather)
+    scene.setWeatherOverride(.snow)
+    precondition(scene.weatherInfoText?.weather == "30° · Rain")
+    scene.setWidth(646)
+    precondition(scene.frameImage().size.width == 646)
+    precondition(scene.weatherInfoText?.weather == "30° · Rain")
+    precondition(scene.displayedWeather?.condition == .snow)
+#endif
 }

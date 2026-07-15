@@ -15,7 +15,9 @@ func cloudTint(for period: FarmPeriod) -> NSColor {
 }
 
 final class FarmScene {
-    private let width: CGFloat
+    static let weatherInfoRect = NSRect(x: 4, y: 3, width: 108, height: 24)
+
+    private var width: CGFloat
     private let tileWidth: CGFloat
     private let frameDuration: TimeInterval
     private var currentPeriod: FarmPeriod
@@ -42,6 +44,7 @@ final class FarmScene {
     private var transitionProgress: CGFloat = 1
 
     private(set) var currentWeather: WeatherState?
+    private(set) var locationName: String?
     private(set) var weatherOverride: WeatherCondition?
 
     var displayedPeriod: FarmPeriod {
@@ -58,6 +61,11 @@ final class FarmScene {
             cloudCover: currentWeather?.cloudCover ?? 80,
             isDay: currentWeather?.isDay ?? true
         )
+    }
+
+    var weatherInfoText: (location: String, weather: String)? {
+        guard let currentWeather else { return nil }
+        return farmWeatherInfo(weather: currentWeather, locationName: locationName)
     }
 
     var requiresAnimation: Bool {
@@ -104,6 +112,17 @@ final class FarmScene {
 
     func setLifeOverride(_ showLife: Bool?) {
         lifeOverride = showLife
+    }
+
+    func setLocationName(_ locationName: String?) {
+        self.locationName = locationName
+    }
+
+    func setWidth(_ width: CGFloat) {
+        guard width > 0, width != self.width else { return }
+        self.width = width
+        transitionImage = nil
+        transitionProgress = 1
     }
 
     @discardableResult
@@ -170,8 +189,12 @@ final class FarmScene {
             if isLifeVisible {
                 drawRoamingFarmLife(in: rect)
             }
-            if let currentWeather {
-                drawTemperature(currentWeather.temperature, in: rect)
+            if let weatherInfoText {
+                drawWeatherInfo(
+                    location: weatherInfoText.location,
+                    weather: weatherInfoText.weather,
+                    in: rect
+                )
             }
             if let transitionImage {
                 transitionImage.draw(
@@ -391,7 +414,7 @@ final class FarmScene {
         case .fog:
             NSColor(calibratedWhite: 0.72, alpha: 0.3).setFill()
             rect.fill()
-            for index in 0..<6 {
+            for index in 0..<scaledWeatherElementCount(6, width: rect.width) {
                 let fogWidth: CGFloat = index.isMultiple(of: 2) ? 150 : 110
                 let x = wrappedOffset(
                     weatherPhase * rect.width + CGFloat(index) * 83,
@@ -413,17 +436,29 @@ final class FarmScene {
             NSColor.black.withAlphaComponent(0.3).setFill()
             rect.fill()
             drawClouds(in: rect, fraction: 0.9)
-            drawRain(in: rect, count: 44, speed: 10)
+            drawRain(
+                in: rect,
+                count: scaledWeatherElementCount(44, width: rect.width),
+                speed: 10
+            )
         case .snow:
             NSColor.black.withAlphaComponent(0.22).setFill()
             rect.fill()
             drawClouds(in: rect, fraction: 0.75)
-            drawSnow(in: rect, count: 32, speed: 3)
+            drawSnow(
+                in: rect,
+                count: scaledWeatherElementCount(32, width: rect.width),
+                speed: 3
+            )
         case .thunderstorm:
             NSColor.black.withAlphaComponent(0.42).setFill()
             rect.fill()
             drawClouds(in: rect, fraction: 0.95)
-            drawRain(in: rect, count: 58, speed: 13)
+            drawRain(
+                in: rect,
+                count: scaledWeatherElementCount(58, width: rect.width),
+                speed: 13
+            )
             let flashPhase = wrappedOffset(weatherPhase * 3, width: 1)
             if flashPhase > 0.94 {
                 let strength = sin((flashPhase - 0.94) / 0.06 * .pi) * 0.42
@@ -438,8 +473,17 @@ final class FarmScene {
             (20, 10, 19, 1), (14, 7, 22, 0.8),
             (18, 9, 15, 0.9), (12, 6, 18, 0.7)
         ]
-        for (index, cloud) in clouds.enumerated() {
-            let x = -cloud.width + (rect.width + cloud.width) * cloudPhases[index]
+        let count = scaledWeatherElementCount(clouds.count, width: rect.width)
+        let copies = Int(ceil(CGFloat(count) / CGFloat(clouds.count)))
+        for index in 0..<count {
+            let cloudIndex = index % clouds.count
+            let copyIndex = index / clouds.count
+            let cloud = clouds[cloudIndex]
+            let phase = wrappedOffset(
+                cloudPhases[cloudIndex] + CGFloat(copyIndex) / CGFloat(copies),
+                width: 1
+            )
+            let x = -cloud.width + (rect.width + cloud.width) * phase
             drawCloud(
                 in: NSRect(x: x, y: cloud.y, width: cloud.width, height: cloud.height),
                 fraction: fraction * cloud.alpha
@@ -474,12 +518,16 @@ final class FarmScene {
     private func drawRain(in rect: NSRect, count: Int, speed: CGFloat) {
         let path = NSBezierPath()
         path.lineWidth = 0.9
+        let span = max(1, Int(rect.width.rounded()))
         for index in 0..<count {
             let progress = wrappedOffset(
                 weatherPhase * speed + CGFloat(index) * 0.113,
                 width: 1
             )
-            let x = wrappedOffset(CGFloat((index * 47) % 360) - progress * 12, width: rect.width)
+            let x = wrappedOffset(
+                CGFloat((index * 47) % span) - progress * 12,
+                width: rect.width
+            )
             let y = rect.height - progress * (rect.height + 9)
             path.move(to: NSPoint(x: x, y: y))
             path.line(to: NSPoint(x: x - 3, y: y - 7))
@@ -490,6 +538,7 @@ final class FarmScene {
 
     private func drawSnow(in rect: NSRect, count: Int, speed: CGFloat) {
         NSColor.white.withAlphaComponent(0.94).setFill()
+        let span = max(1, Int(rect.width.rounded()))
         for index in 0..<count {
             let flakeSpeed = speed + CGFloat(index % 3) - 1
             let offset = CGFloat((index * 37) % count) / CGFloat(count)
@@ -501,26 +550,42 @@ final class FarmScene {
             ) * amplitude + CGFloat(
                 sin(Double(weatherPhase * .pi * 6 + CGFloat(index) * 0.41))
             ) * 1.5
-            let x = wrappedOffset(CGFloat((index * 83) % 360) + drift, width: rect.width)
+            let x = wrappedOffset(CGFloat((index * 83) % span) + drift, width: rect.width)
             let y = rect.height - progress * (rect.height + 4)
             let diameter: CGFloat = index.isMultiple(of: 3) ? 2 : 1.4
             NSBezierPath(ovalIn: NSRect(x: x, y: y, width: diameter, height: diameter)).fill()
         }
     }
 
-    private func drawTemperature(_ temperature: Double, in rect: NSRect) {
-        let text = "\(Int(temperature.rounded()))°"
+    private func drawWeatherInfo(location: String, weather: String, in rect: NSRect) {
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.9)
         shadow.shadowBlurRadius = 2
         shadow.shadowOffset = .zero
-        let attributes: [NSAttributedString.Key: Any] = [
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let locationAttributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.white,
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold),
+            .font: NSFont.systemFont(ofSize: 8, weight: .semibold),
+            .paragraphStyle: paragraph,
             .shadow: shadow
         ]
-        let size = text.size(withAttributes: attributes)
-        text.draw(at: NSPoint(x: rect.maxX - size.width - 4, y: 18), withAttributes: attributes)
+        let weatherAttributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: 8, weight: .bold),
+            .paragraphStyle: paragraph,
+            .shadow: shadow
+        ]
+        let infoRect = Self.weatherInfoRect.offsetBy(dx: rect.minX, dy: rect.minY)
+        location.draw(
+            in: NSRect(x: infoRect.minX, y: infoRect.minY + 12, width: infoRect.width, height: 10),
+            withAttributes: locationAttributes
+        )
+        weather.draw(
+            in: NSRect(x: infoRect.minX, y: infoRect.minY, width: infoRect.width, height: 10),
+            withAttributes: weatherAttributes
+        )
     }
 
     private func drawFarmSprite(

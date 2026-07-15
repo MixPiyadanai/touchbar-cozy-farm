@@ -1,8 +1,20 @@
 import AppKit
 import CoreLocation
 import Foundation
+import MapKit
+
+func farmFrame(showingUsage: Bool, usageWidth: CGFloat, farmWidth: CGFloat) -> NSRect {
+    NSRect(
+        x: showingUsage ? usageWidth : 0,
+        y: 0,
+        width: showingUsage ? farmWidth : usageWidth + farmWidth,
+        height: 30
+    )
+}
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CLLocationManagerDelegate {
+    private static let showUsageKey = "showCodexUsage"
+
     private let trayIdentifier = NSTouchBarItem.Identifier("CodexTouchBar.anchor")
     private let usageIdentifier = NSTouchBarItem.Identifier("CodexTouchBar.usage")
     private let cardWidth: CGFloat = 286
@@ -12,9 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
     private let touchBar = NSTouchBar()
     private let usageClient = CodexUsageClient()
     private let weatherClient = WeatherClient()
+    private var geocodingRequest: AnyObject?
+    private var isUsageVisible = UserDefaults.standard.bool(forKey: showUsageKey)
     private lazy var usageRenderer = UsageRenderer(width: cardWidth)
     private lazy var farmScene = FarmScene(
-        width: farmWidth,
+        width: farmFrame(
+            showingUsage: isUsageVisible,
+            usageWidth: cardWidth,
+            farmWidth: farmWidth
+        ).width,
         tileWidth: 288,
         frameDuration: animationFrame
     )
@@ -29,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
     private var statusItem: NSStatusItem?
     private var codexStatusMenuItem: NSMenuItem?
     private var weatherStatusMenuItem: NSMenuItem?
+    private var showUsageMenuItem: NSMenuItem?
     private var touchBarView: NSView?
     private var usageButton: NSButton?
     private var farmButton: NSButton?
@@ -60,8 +79,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         usageButton.toolTip = "Tap to refresh Codex usage."
         usageButton.setAccessibilityLabel("Codex remaining usage")
 
+        let initialFarmFrame = farmFrame(
+            showingUsage: isUsageVisible,
+            usageWidth: cardWidth,
+            farmWidth: farmWidth
+        )
         let farmButton = NSButton(image: farmScene.frameImage(), target: nil, action: nil)
-        farmButton.frame = NSRect(x: cardWidth, y: 0, width: farmWidth, height: 30)
+        farmButton.frame = initialFarmFrame
         farmButton.isBordered = false
         farmButton.imagePosition = .imageOnly
         farmButton.imageScaling = .scaleNone
@@ -74,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         let touchBarView = NSView(
             frame: NSRect(x: 0, y: 0, width: cardWidth + farmWidth, height: 30)
         )
+        usageButton.isHidden = !isUsageVisible
         touchBarView.addSubview(usageButton)
         touchBarView.addSubview(farmButton)
         self.usageButton = usageButton
@@ -88,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         trayItem.view = NSButton(
             image: NSImage(
                 systemSymbolName: "chevron.left",
-                accessibilityDescription: "Show Codex usage"
+                accessibilityDescription: "Show Cozy Farm Touch Bar"
             )!,
             target: self,
             action: #selector(showTouchBar)
@@ -144,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         usageTimer?.invalidate()
         weatherTimer?.invalidate()
         farmAnimationTimer?.invalidate()
+        cancelLocationGeocoding()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         NotificationCenter.default.removeObserver(self)
         ControlStrip.dismiss(touchBar)
@@ -180,6 +206,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         menu.addItem(weatherStatus)
         menu.addItem(.separator())
 
+        let showUsage = NSMenuItem(
+            title: "Show Codex Usage",
+            action: #selector(toggleCodexUsage),
+            keyEquivalent: ""
+        )
+        showUsage.target = self
+        showUsage.state = isUsageVisible ? .on : .off
+        menu.addItem(showUsage)
         let refreshCodex = NSMenuItem(
             title: "Refresh Codex",
             action: #selector(cardTapped),
@@ -272,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         self.statusItem = statusItem
         codexStatusMenuItem = codexStatus
         weatherStatusMenuItem = weatherStatus
+        showUsageMenuItem = showUsage
         updateMenuBar()
     }
 
@@ -283,9 +318,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         }
         if let currentWeather = farmScene.currentWeather {
             let temperature = Int(currentWeather.temperature.rounded())
-            let condition = farmScene.weatherOverride ?? currentWeather.condition
-            let preview = farmScene.weatherOverride == nil ? "" : " preview"
-            weatherStatusMenuItem?.title = "Weather: \(temperature)°C · \(condition.label)\(preview)"
+            let location = farmScene.locationName ?? "Local weather"
+            let preview = farmScene.weatherOverride.map { " · \($0.label) preview" } ?? ""
+            weatherStatusMenuItem?.title = "Weather: \(location) · \(temperature)°C · \(currentWeather.condition.label)\(preview)"
             statusItem?.button?.title = "🌾 \(temperature)°"
         } else if let weatherOverride = farmScene.weatherOverride {
             weatherStatusMenuItem?.title = "Weather preview: \(weatherOverride.label)"
@@ -327,6 +362,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
 
     @objc private func refreshWeatherFromMenu() {
         requestWeatherAccessIfNeeded()
+    }
+
+    @objc private func toggleCodexUsage() {
+        isUsageVisible.toggle()
+        UserDefaults.standard.set(isUsageVisible, forKey: Self.showUsageKey)
+        applyUsageVisibility()
+    }
+
+    private func applyUsageVisibility() {
+        let frame = farmFrame(
+            showingUsage: isUsageVisible,
+            usageWidth: cardWidth,
+            farmWidth: farmWidth
+        )
+        usageButton?.isHidden = !isUsageVisible
+        farmButton?.frame = frame
+        farmScene.setWidth(frame.width)
+        showUsageMenuItem?.state = isUsageVisible ? .on : .off
+        updateFarmImage()
     }
 
     @objc private func terminateFromMenu() {
@@ -416,9 +470,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
-        weatherCoordinate = coordinate
-        fetchWeather(at: coordinate)
+        guard let location = locations.last else { return }
+        weatherCoordinate = location.coordinate
+        resolveLocationName(for: location)
+        fetchWeather(at: location.coordinate)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -434,6 +489,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
         } else {
             refreshLocationIfAuthorized()
         }
+    }
+
+    private func resolveLocationName(for location: CLLocation) {
+        cancelLocationGeocoding()
+        if #available(macOS 26.0, *) {
+            guard let request = MKReverseGeocodingRequest(location: location) else { return }
+            request.preferredLocale = .current
+            geocodingRequest = request
+            request.getMapItems { [weak self] mapItems, _ in
+                let address = mapItems?.first?.addressRepresentations
+                self?.applyLocationName(
+                    preferredLocationName(
+                        locality: address?.cityName,
+                        district: nil,
+                        region: address?.regionName,
+                        country: nil
+                    )
+                )
+            }
+        } else {
+            let geocoder = CLGeocoder()
+            geocodingRequest = geocoder
+            geocoder.reverseGeocodeLocation(
+                location,
+                preferredLocale: .current
+            ) { [weak self] placemarks, _ in
+                guard let placemark = placemarks?.first else { return }
+                self?.applyLocationName(
+                    preferredLocationName(
+                        locality: placemark.locality,
+                        district: placemark.subLocality ?? placemark.subAdministrativeArea,
+                        region: placemark.administrativeArea,
+                        country: placemark.country
+                    )
+                )
+            }
+        }
+    }
+
+    private func applyLocationName(_ name: String?) {
+        guard let name else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            farmScene.setLocationName(name)
+            updateFarmImage()
+            updateFarmMetadata()
+        }
+    }
+
+    private func cancelLocationGeocoding() {
+        if #available(macOS 26.0, *) {
+            (geocodingRequest as? MKReverseGeocodingRequest)?.cancel()
+        } else {
+            (geocodingRequest as? CLGeocoder)?.cancelGeocode()
+        }
+        geocodingRequest = nil
     }
 
     private func fetchWeather(at coordinate: CLLocationCoordinate2D) {
@@ -482,12 +593,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarDelegate, CL
 
     private func updateFarmMetadata() {
         defer { updateMenuBar() }
-        if let currentWeather = farmScene.currentWeather,
-           let displayedWeather = farmScene.displayedWeather {
+        if let currentWeather = farmScene.currentWeather {
             let temperature = Int(currentWeather.temperature.rounded())
-            farmButton?.toolTip = "\(temperature)°C · \(displayedWeather.condition.label). Farm life roams in fair daylight. Weather data by Open-Meteo.com."
+            let location = farmScene.locationName ?? "Local weather"
+            let preview = farmScene.weatherOverride.map { " \($0.label) preview active." } ?? ""
+            let accessibilityPreview = farmScene.weatherOverride.map {
+                ", \($0.label) preview active"
+            } ?? ""
+            farmButton?.toolTip = "\(location) · \(temperature)°C · \(currentWeather.condition.label).\(preview) Farm life roams in fair daylight. Weather data by Open-Meteo.com."
             farmButton?.setAccessibilityValue(
-                "\(temperature) degrees Celsius, \(displayedWeather.condition.label)"
+                "\(location), \(temperature) degrees Celsius, \(currentWeather.condition.label)\(accessibilityPreview)"
             )
         } else if let weatherOverride = farmScene.weatherOverride {
             farmButton?.toolTip = "\(weatherOverride.label) preview. Tap for live weather."

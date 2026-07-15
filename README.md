@@ -38,7 +38,7 @@ clouds, dense fog, rain, snow, and thunderstorms.
 - **Rare cozy moments** — rainbows after rain, fireflies at dusk, and shooting
   stars at night.
 - **Menu-bar controls** — refresh Codex or weather, preview any time/weather,
-  show or hide farm life, restore the Touch Bar, or quit.
+  show or hide Codex usage and farm life, restore the Touch Bar, or quit.
 - **Persistent presence** — keeps the card available beside the normal macOS
   Control Strip and can start automatically at login.
 
@@ -48,6 +48,7 @@ clouds, dense fog, rain, snow, and thunderstorms.
 | --- | --- |
 | Codex card | Tap to refresh usage. Repeated taps are safely ignored while refreshing. |
 | Farm | Tap to request approximate location or refresh live weather. |
+| Show Codex Usage | Toggle the Codex card; the farm fills its space. The choice is remembered. |
 | Menu-bar wheat icon | Open appearance, weather, farm-life, refresh, and quit controls. |
 | Control Strip chevron | Bring the custom card back when macOS hides it. |
 

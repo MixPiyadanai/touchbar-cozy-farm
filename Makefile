@@ -13,7 +13,7 @@ DOMAIN := gui/$(shell id -u)
 
 build:
 	mkdir -p .build
-	xcrun swiftc -O -framework AppKit -framework CoreLocation $(SOURCES) -o $(BINARY)
+	xcrun swiftc -O -framework AppKit -framework CoreLocation -framework MapKit $(SOURCES) -o $(BINARY)
 
 app: build
 	rm -rf $(APP)
