@@ -11,6 +11,10 @@
   <img alt="No weather API key" src="https://img.shields.io/badge/weather-no_API_key-4A90E2?style=flat-square">
 </p>
 
+<p align="center">
+  <img src="docs/assets/touchbar-cozy-farm-hero.png" width="100%" alt="TouchBar Cozy Farm running on a MacBook Pro with a Thai-English keyboard">
+</p>
+
 ## A tiny world above your keyboard
 
 These are the actual farm scenes bundled with the app—not mockups.
